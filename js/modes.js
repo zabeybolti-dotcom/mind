@@ -9,7 +9,7 @@ const FADE_MS = 500;      // мс: затухание/появление стр�
 const OUTRO_PAUSE = 6.5;  // с: сколько висит финальная строка перед авто-выходом
 const FLY_SHARE = 0.5;    // полёт камеры занимает не больше этой доли паузы шага
 
-export function createModes({ modes, rig, regions, markers, audio, dock, overlay, onActive }) {
+export function createModes({ modes, rig, regions, markers, audio, dock, overlay, onActive, onStep }) {
   // ---------- DOM ----------
   const nameEl = overlay.querySelector('#modeName');
   const textEl = overlay.querySelector('#modeText');
@@ -54,6 +54,7 @@ export function createModes({ modes, rig, regions, markers, audio, dock, overlay
     if (s.cam) rig.flyTo(s.cam, Math.max(1.2, (s.pause || 4) * FLY_SHARE));
     regions.glowSet(s.regions || []);
     markers.setModeSet(s.markers || null);
+    if (onStep) onStep(s); // пр.17: шаг с deep-зоной сам включает рентген (main.js)
     setText(s.text);
     const g = gen;
     timer = setTimeout(() => { if (g === gen) advance(); }, (s.pause || 4) * 1000);
@@ -76,6 +77,7 @@ export function createModes({ modes, rig, regions, markers, audio, dock, overlay
     cur.finished = true;
     const g = gen;
     markers.setModeSet(null);
+    if (onStep) onStep(null); // аутро: зон не показываем — рентген гаснет (пр.17)
     setText(cur.mode.outro);
     timer = setTimeout(() => { if (g === gen) exit(); }, OUTRO_PAUSE * 1000);
   }

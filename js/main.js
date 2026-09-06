@@ -271,24 +271,34 @@ btnTour.addEventListener('click', () => {
 document.getElementById('chipsBar').addEventListener('click', () => tour.pause());
 
 // ---------- Режимы (S14): Сон / Любовь / Страх / Музыка / Творчество ----------
-// Пр.16: рентген не включён на весь режим — он живёт на шаге: в шаге показаны
-// deep-точки — включён, шаг без глубины / финал / выход — погас
-function modeSetXray(ids) {
-  const deep = (ids || []).some((id) => {
-    const c = CARDS.find((x) => x.id === id);
-    return !!c && !!REGIONS[REGION_INDEX[c.region]].deep;
-  });
+// Пр.17: рентген живёт на шаге и учитывает ЗОНЫ шага: после пр.13 глубокие
+// структуры невидимы без рентгена, а большинство зон сценариев — глубокие
+// (таламус, гиппокамп, миндалина…), без него шаг не подсвечен вовсе.
+function stepXray(s) {
+  let deep = false;
+  if (s) {
+    for (const key of s.regions || []) {
+      const ri = REGION_INDEX[key];
+      if (ri !== undefined && REGIONS[ri].deep) { deep = true; break; }
+    }
+    if (!deep) {
+      for (const id of s.markers || []) {
+        const c = CARDS.find((x) => x.id === id);
+        if (c && REGIONS[REGION_INDEX[c.region]].deep) { deep = true; break; }
+      }
+    }
+  }
   if (deep !== deepAutoXray) { deepAutoXray = deep; applyXray(); }
 }
 const modes = createModes({
   modes: MODES,
   rig,
   regions,
-  // обёртка: каждое обновление набора точек синхронизирует рентген шага
-  markers: { ...markers, setModeSet(ids) { markers.setModeSet(ids); modeSetXray(ids); } },
+  markers,
   audio,
   dock: document.getElementById('modeDock'),
   overlay: document.getElementById('modeOverlay'),
+  onStep: stepXray, // каждый шаг (аутро — onStep(null)) синхронизирует рентген
   onActive(on) {
     document.body.classList.toggle('mode-on', on);
     if (on && tour.active()) tour.stop(); // экскурсия и режим — не одновременно
@@ -309,9 +319,20 @@ function onResize() {
   renderer.setPixelRatio(quality.dpr);
   renderer.setSize(w, h);
   camera.aspect = w / h;
+  // Пр.18: вертикальный экран — держим горизонтальный обзор ландшафта (fov 42),
+  // иначе мозг режется по ширине; кадр чуть выше центра — над доками и чипами
+  if (camera.aspect < 1) {
+    const half = Math.atan(Math.tan((CAMERA_FOV * Math.PI) / 360) / camera.aspect);
+    camera.fov = Math.min(76, (half * 360) / Math.PI);
+    camera.setViewOffset(w, h, 0, h * 0.04, w, h);
+  } else {
+    camera.fov = CAMERA_FOV;
+    camera.clearViewOffset();
+  }
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', onResize);
+onResize(); // пр.18: старт на смартфоне — вертикальный кадр с первого мига
 
 // ---------- Render-цикл ----------
 let rafId = 0;

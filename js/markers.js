@@ -10,6 +10,8 @@ import * as THREE from '../lib/three.module.min.js';
 import { clamp, mulberry32 } from './utils.js';
 import { REGIONS } from './regions.js';
 
+const REG_N = REGIONS.length; // размер uniform-массива подсветки зон (пр.17)
+
 // ---------- Тюнинг ----------
 const MARKER_SEED = 42;  // seed размещения: смена — другая карта точек
 const JITTER = 0.8;      // доля spread: разброс точек внутри зоны
@@ -47,10 +49,12 @@ const MARKER_VERT = /* glsl */`
   attribute float aState; // множитель яркости: обычная / приглушена / активна
   attribute float aHover; // 0/1 — курсор над точкой
   attribute float aDeep;  // 1 — точка глубины: живёт только в рентгене (S09)
+  attribute float aRegion; // индекс области точки — подсветка зоны (пр.17)
   uniform float uTime;
   uniform float uScale;   // пикселей на мировую единицу на дистанции 1
   uniform float uReveal;  // проявление сцены после интро (S09)
   uniform float uDeepGlow; // свечение глубины = прогресс рентгена (общий с мозгом)
+  uniform float uRegionGlow[${REG_N}]; // тот же массив подсветки, что у коры (пр.17)
   varying vec3 vColor;
 
   void main() {
@@ -64,13 +68,20 @@ const MARKER_VERT = /* glsl */`
     // вне рентгена deep-точка — тлеющий фон (×0.135 и на треть мельче), не кнопка
     float deepOn = smoothstep(0.25, 0.6, uDeepGlow);
     float deepGate = mix(uDeepGlow * 0.45, uDeepGlow, deepOn);
+    // пр.17: маркер горящей зоны (чип или шаг режима) вспыхивает поверх состояний
+    float zoneGlow = 0.0;
+    for (int i = 0; i < ${REG_N}; i++) {
+      if (float(i) == aRegion) zoneGlow = uRegionGlow[i];
+    }
     float pulse = 0.78 + 0.22 * sin(uTime * ${PULSE_SPEED.toFixed(1)} + aPhase);
     gl_PointSize = clamp(
       aSize * (1.0 + ${HOVER_SIZE.toFixed(1)} * aHover) * pulse * uScale / -mv.z
-        * (0.6 + 0.4 * vis) * mix(1.0, 0.65, aDeep * (1.0 - deepOn)),
+        * (0.6 + 0.4 * vis) * mix(1.0, 0.65, aDeep * (1.0 - deepOn))
+        * (1.0 + 0.35 * zoneGlow),
       2.4, 90.0);
     vColor = aColor * (aState * pulse * (1.0 + ${HOVER_GLOW.toFixed(1)} * aHover))
-      * mix(1.0, deepGate, aDeep) * uReveal * (0.05 + 0.95 * vis) * (1.0 + 0.35 * front);
+      * mix(1.0, deepGate, aDeep) * uReveal * (0.05 + 0.95 * vis) * (1.0 + 0.35 * front)
+      * (1.0 + 2.0 * zoneGlow);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -336,6 +347,7 @@ export function createMarkers({ cards, brain, camera, rig, canvas, regions, tool
   geo.setAttribute('aState', stateAttr);
   geo.setAttribute('aHover', hoverAttr);
   geo.setAttribute('aDeep', new THREE.BufferAttribute(deepFlags, 1));
+  geo.setAttribute('aRegion', new THREE.BufferAttribute(regionOf, 1)); // пр.17: зона
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1.6); // вручную: всё в пределах мозга
 
   const mat = new THREE.ShaderMaterial({
@@ -344,6 +356,7 @@ export function createMarkers({ cards, brain, camera, rig, canvas, regions, tool
       uScale: { value: 1 },
       uReveal: brain.reveal,   // общий с мозгом объект {value}: интро ведёт всех (S09)
       uDeepGlow: brain.deepGlow, // рентген: deep-точки проявляются вместе со структурами
+      uRegionGlow: { value: brain.region.glow }, // пр.17: подсветка зон — общая с мозгом
     },
     vertexShader: MARKER_VERT,
     fragmentShader: MARKER_FRAG,
