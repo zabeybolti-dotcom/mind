@@ -271,27 +271,31 @@ btnTour.addEventListener('click', () => {
 document.getElementById('chipsBar').addEventListener('click', () => tour.pause());
 
 // ---------- Режимы (S14): Сон / Любовь / Страх / Музыка / Творчество ----------
-let xrayBeforeMode = false;
+// Пр.16: рентген не включён на весь режим — он живёт на шаге: в шаге показаны
+// deep-точки — включён, шаг без глубины / финал / выход — погас
+function modeSetXray(ids) {
+  const deep = (ids || []).some((id) => {
+    const c = CARDS.find((x) => x.id === id);
+    return !!c && !!REGIONS[REGION_INDEX[c.region]].deep;
+  });
+  if (deep !== deepAutoXray) { deepAutoXray = deep; applyXray(); }
+}
 const modes = createModes({
   modes: MODES,
   rig,
   regions,
-  markers,
+  // обёртка: каждое обновление набора точек синхронизирует рентген шага
+  markers: { ...markers, setModeSet(ids) { markers.setModeSet(ids); modeSetXray(ids); } },
   audio,
   dock: document.getElementById('modeDock'),
   overlay: document.getElementById('modeOverlay'),
-  // Глубокие структуры есть в каждом сценарии — на время режима рентген принудительно
-  // включён, на выходе честно возвращаем прежнее ручное состояние
   onActive(on) {
     document.body.classList.toggle('mode-on', on);
     if (on && tour.active()) tour.stop(); // экскурсия и режим — не одновременно
     if (on) {
       cards.hide(); // карточка/хэш закроются штатно, сцена свободна
-      xrayBeforeMode = xrayManual;
-      xrayManual = true;
-      applyXray();
     } else {
-      xrayManual = xrayBeforeMode;
+      deepAutoXray = false; // страховка: на выходе глубина гаснет
       applyXray();
     }
   },
