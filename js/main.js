@@ -290,6 +290,24 @@ function stepXray(s) {
   }
   if (deep !== deepAutoXray) { deepAutoXray = deep; applyXray(); }
 }
+
+// Пр.19: углы камеры шага — из якоря ПЕРВОЙ зоны шага: авторские theta/phi в
+// контенте писались вслепую и уводили фокус в чужую долю (шаг про затылку —
+// камера спереди). Радиус полёта остаётся авторским (r из сценария).
+for (const m of MODES) {
+  for (const s of m.steps) {
+    const ri = s.regions ? REGION_INDEX[s.regions[0]] : undefined;
+    if (ri === undefined) continue;
+    const d = REGIONS[ri].dir;
+    const len = Math.hypot(d[0], d[1], d[2]) || 1;
+    s.cam = {
+      theta: Math.atan2(d[0], d[2]),
+      phi: Math.acos(d[1] / len),
+      r: (s.cam && s.cam.r) || 2.7,
+    };
+  }
+}
+
 const modes = createModes({
   modes: MODES,
   rig,
